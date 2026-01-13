@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -17,6 +17,12 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export default function MyTimeOffPage() {
   const { user } = useUser();
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [pendingDates, setPendingDates] = useState<Set<string>>(new Set());
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const currentUser = useQuery(
     api.users.getCurrentUser,
@@ -30,12 +36,21 @@ export default function MyTimeOffPage() {
 
   const addTimeOff = useMutation(api.timeOff.addTimeOff);
   const removeTimeOff = useMutation(api.timeOff.removeTimeOff);
+  const updateUserName = useMutation(api.users.updateUserName);
+
+  // Sync local state with currentUser data
+  useEffect(() => {
+    if (currentUser) {
+      setFirstName(currentUser.firstName || "");
+      setLastName(currentUser.lastName || "");
+    }
+  }, [currentUser]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const days = useMemo(() => getMonthDays(year, month), [year, month]);
 
-  // Create a set of dates that have time off
+  // Create a set of dates that have time off (already saved)
   const timeOffDates = useMemo(() => {
     return new Set(myTimeOff?.map((entry) => entry.date) || []);
   }, [myTimeOff]);
@@ -52,15 +67,44 @@ export default function MyTimeOffPage() {
     setCurrentDate(new Date());
   };
 
-  const toggleTimeOff = async (date: Date) => {
-    if (!currentUser?._id) return;
-
+  const toggleDateSelection = (date: Date) => {
     const dateStr = formatDate(date);
 
+    // If already saved, remove it directly
     if (timeOffDates.has(dateStr)) {
-      await removeTimeOff({ userId: currentUser._id, date: dateStr });
-    } else {
-      await addTimeOff({ userId: currentUser._id, date: dateStr });
+      if (currentUser?._id) {
+        removeTimeOff({ userId: currentUser._id, date: dateStr });
+      }
+      return;
+    }
+
+    // Toggle pending selection
+    setPendingDates((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(dateStr)) {
+        newSet.delete(dateStr);
+      } else {
+        newSet.add(dateStr);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (!currentUser?._id || pendingDates.size === 0) return;
+
+    setIsSubmitting(true);
+    try {
+      // Save all pending dates
+      await Promise.all(
+        Array.from(pendingDates).map((date) =>
+          addTimeOff({ userId: currentUser._id, date })
+        )
+      );
+      // Clear pending dates after successful submission
+      setPendingDates(new Set());
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -73,6 +117,28 @@ export default function MyTimeOffPage() {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [myTimeOff]);
 
+  const handleSaveProfile = async () => {
+    if (!user?.id || !firstName.trim() || !lastName.trim()) return;
+
+    setIsSavingProfile(true);
+    try {
+      await updateUserName({
+        clerkId: user.id,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+      });
+      setIsEditingProfile(false);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setFirstName(currentUser?.firstName || "");
+    setLastName(currentUser?.lastName || "");
+    setIsEditingProfile(false);
+  };
+
   if (!currentUser || myTimeOff === undefined) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -84,11 +150,26 @@ export default function MyTimeOffPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">My Time Off</h1>
-        <p className="text-gray-600">
-          Click on dates to add or remove your time off
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">My Time Off</h1>
+          <p className="text-gray-600">
+            Select dates and click submit to request time off
+          </p>
+        </div>
+        <button
+          onClick={handleSubmit}
+          disabled={pendingDates.size === 0 || isSubmitting}
+          className={`
+            px-6 py-2.5 rounded-lg font-medium transition-colors
+            ${pendingDates.size > 0 && !isSubmitting
+              ? "bg-blue-600 text-white hover:bg-blue-700"
+              : "bg-gray-200 text-gray-500 cursor-not-allowed"
+            }
+          `}
+        >
+          {isSubmitting ? "Submitting..." : `Submit${pendingDates.size > 0 ? ` (${pendingDates.size} day${pendingDates.size > 1 ? "s" : ""})` : ""}`}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -167,20 +248,22 @@ export default function MyTimeOffPage() {
               const dateStr = formatDate(date);
               const isCurrentMonth = isSameMonth(date, currentDate);
               const isToday = isSameDay(date, new Date());
-              const hasTimeOff = timeOffDates.has(dateStr);
+              const isSaved = timeOffDates.has(dateStr);
+              const isPending = pendingDates.has(dateStr);
               const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
 
               return (
                 <button
                   key={index}
-                  onClick={() => toggleTimeOff(date)}
+                  onClick={() => toggleDateSelection(date)}
                   disabled={!isCurrentMonth}
                   className={`
                     min-h-[80px] p-2 border-b border-r border-gray-100 text-left
                     transition-colors
                     ${isCurrentMonth ? "hover:bg-gray-50" : ""}
                     ${!isCurrentMonth ? "bg-gray-50 cursor-default" : "cursor-pointer"}
-                    ${hasTimeOff && isCurrentMonth ? "bg-blue-50 hover:bg-blue-100" : ""}
+                    ${isSaved && isCurrentMonth ? "bg-blue-50 hover:bg-blue-100" : ""}
+                    ${isPending && isCurrentMonth ? "bg-amber-50 hover:bg-amber-100" : ""}
                   `}
                 >
                   <span
@@ -194,10 +277,17 @@ export default function MyTimeOffPage() {
                   >
                     {date.getDate()}
                   </span>
-                  {hasTimeOff && isCurrentMonth && (
+                  {isSaved && isCurrentMonth && (
                     <div className="mt-1">
-                      <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded">
-                        PTO
+                      <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded truncate block">
+                        {currentUser.firstName} {currentUser.lastName?.[0]}.
+                      </span>
+                    </div>
+                  )}
+                  {isPending && isCurrentMonth && (
+                    <div className="mt-1">
+                      <span className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded truncate block border border-dashed border-amber-300">
+                        Pending
                       </span>
                     </div>
                   )}
@@ -268,6 +358,90 @@ export default function MyTimeOffPage() {
                 {myTimeOff?.length || 0}
               </span>
             </div>
+          </div>
+
+          {/* Profile Section */}
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">My Profile</h3>
+              {!isEditingProfile && (
+                <button
+                  onClick={() => setIsEditingProfile(true)}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+
+            {isEditingProfile ? (
+              <div className="space-y-4">
+                <div>
+                  <label
+                    htmlFor="firstName"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    First Name
+                  </label>
+                  <input
+                    type="text"
+                    id="firstName"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Enter first name"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="lastName"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Last Name
+                  </label>
+                  <input
+                    type="text"
+                    id="lastName"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Enter last name"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveProfile}
+                    disabled={isSavingProfile || !firstName.trim() || !lastName.trim()}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSavingProfile ? "Saving..." : "Save"}
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    disabled={isSavingProfile}
+                    className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                    <span className="text-blue-600 font-medium">
+                      {currentUser.firstName?.[0]}{currentUser.lastName?.[0]}
+                    </span>
+                  </div>
+                  <p className="font-medium text-gray-900">
+                    {currentUser.firstName} {currentUser.lastName}
+                  </p>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  This name will appear on your PTO calendar entries
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -97,3 +97,28 @@ export const getUsersByTeam = query({
     return users;
   },
 });
+
+export const updateUserName = mutation({
+  args: {
+    clerkId: v.string(),
+    firstName: v.string(),
+    lastName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    await ctx.db.patch(user._id, {
+      firstName: args.firstName,
+      lastName: args.lastName,
+    });
+
+    return user._id;
+  },
+});
