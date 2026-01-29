@@ -21,7 +21,7 @@ export default function LandingPage() {
                 href="/sign-up"
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium"
               >
-                Get Started
+                Sign Up
               </Link>
             </div>
           </div>
@@ -44,7 +44,7 @@ export default function LandingPage() {
               href="/sign-up"
               className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 font-medium text-lg"
             >
-              Get Started Free
+              Sign Up
             </Link>
             <Link
               href="/sign-in"
