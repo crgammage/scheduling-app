@@ -67,13 +67,22 @@ export default function MyTimeOffPage() {
     setCurrentDate(new Date());
   };
 
-  const toggleDateSelection = (date: Date) => {
+  const toggleDateSelection = async (date: Date) => {
     const dateStr = formatDate(date);
 
-    // If already saved, remove it directly
+    // If already saved, check if it can be removed (not approved)
     if (timeOffDates.has(dateStr)) {
+      const entry = myTimeOff?.find((e) => e.date === dateStr);
+      if (entry?.status?.toLowerCase() === "approved") {
+        // Can't remove approved time off
+        return;
+      }
       if (currentUser?._id) {
-        removeTimeOff({ userId: currentUser._id, date: dateStr });
+        try {
+          await removeTimeOff({ userId: currentUser._id, date: dateStr });
+        } catch {
+          // Error is handled by the mutation
+        }
       }
       return;
     }
@@ -262,7 +271,9 @@ export default function MyTimeOffPage() {
                     transition-colors
                     ${isCurrentMonth ? "hover:bg-gray-50" : ""}
                     ${!isCurrentMonth ? "bg-gray-50 cursor-default" : "cursor-pointer"}
-                    ${isSaved && isCurrentMonth ? "bg-blue-50 hover:bg-blue-100" : ""}
+                    ${isSaved && isCurrentMonth && myTimeOff?.find((e) => e.date === dateStr)?.status?.toLowerCase() === "approved" ? "bg-green-50 hover:bg-green-100" : ""}
+                    ${isSaved && isCurrentMonth && myTimeOff?.find((e) => e.date === dateStr)?.status?.toLowerCase() === "pending" ? "bg-amber-50 hover:bg-amber-100" : ""}
+                    ${isSaved && isCurrentMonth && myTimeOff?.find((e) => e.date === dateStr)?.status?.toLowerCase() === "rejected" ? "bg-red-50 hover:bg-red-100" : ""}
                     ${isPending && isCurrentMonth ? "bg-amber-50 hover:bg-amber-100" : ""}
                   `}
                 >
@@ -277,13 +288,28 @@ export default function MyTimeOffPage() {
                   >
                     {date.getDate()}
                   </span>
-                  {isSaved && isCurrentMonth && (
-                    <div className="mt-1">
-                      <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded truncate block">
-                        {currentUser.firstName} {currentUser.lastName?.[0]}.
-                      </span>
-                    </div>
-                  )}
+                  {isSaved && isCurrentMonth && (() => {
+                    const entry = myTimeOff?.find((e) => e.date === dateStr);
+                    const normalizedStatus = entry?.status?.toLowerCase() || "pending";
+                    const statusStyles: Record<string, string> = {
+                      approved: "bg-green-100 text-green-800",
+                      pending: "bg-amber-100 text-amber-800 border border-dashed border-amber-300",
+                      rejected: "bg-red-100 text-red-800 line-through",
+                    };
+                    return (
+                      <div className="mt-1">
+                        <span
+                          className={`text-xs px-1.5 py-0.5 rounded truncate block ${statusStyles[normalizedStatus] || statusStyles.pending}`}
+                        >
+                          {normalizedStatus === "approved"
+                            ? "Approved"
+                            : normalizedStatus === "pending"
+                              ? "Pending"
+                              : "Rejected"}
+                        </span>
+                      </div>
+                    );
+                  })()}
                   {isPending && isCurrentMonth && (
                     <div className="mt-1">
                       <span className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded truncate block border border-dashed border-amber-300">
@@ -325,26 +351,32 @@ export default function MyTimeOffPage() {
                         }
                       )}
                     </p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(entry.date + "T00:00:00").toLocaleDateString(
-                        "en-US",
-                        {
-                          year: "numeric",
-                        }
-                      )}
-                    </p>
+                    <span
+                      className={`text-xs px-1.5 py-0.5 rounded ${
+                        entry.status?.toLowerCase() === "approved"
+                          ? "bg-green-100 text-green-700"
+                          : entry.status?.toLowerCase() === "pending"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {(entry.status || "pending").charAt(0).toUpperCase() +
+                        (entry.status || "pending").slice(1).toLowerCase()}
+                    </span>
                   </div>
-                  <button
-                    onClick={() =>
-                      removeTimeOff({
-                        userId: currentUser._id,
-                        date: entry.date,
-                      })
-                    }
-                    className="text-red-600 hover:text-red-800 text-sm"
-                  >
-                    Remove
-                  </button>
+                  {entry.status?.toLowerCase() !== "approved" && (
+                    <button
+                      onClick={() =>
+                        removeTimeOff({
+                          userId: currentUser._id,
+                          date: entry.date,
+                        })
+                      }
+                      className="text-red-600 hover:text-red-800 text-sm"
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

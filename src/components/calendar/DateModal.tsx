@@ -6,6 +6,7 @@ type TimeOffEntry = {
   _id: string;
   date: string;
   userId: string;
+  status: "pending" | "approved" | "rejected";
   user: Doc<"users"> | null;
 };
 
@@ -100,10 +101,22 @@ export function DateModal({ date, entries, onClose }: DateModalProps) {
                     </p>
                   </div>
 
-                  {/* PTO Badge */}
+                  {/* Status Badge */}
                   <div className="flex-shrink-0">
-                    <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">
-                      PTO
+                    <span
+                      className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded ${
+                        entry.status?.toLowerCase() === "approved"
+                          ? "bg-green-100 text-green-800"
+                          : entry.status?.toLowerCase() === "pending"
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-red-100 text-red-800"
+                      }`}
+                    >
+                      {entry.status?.toLowerCase() === "approved"
+                        ? "Approved"
+                        : entry.status?.toLowerCase() === "pending"
+                          ? "Pending"
+                          : "Rejected"}
                     </span>
                   </div>
                 </div>

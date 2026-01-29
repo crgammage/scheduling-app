@@ -10,6 +10,7 @@ type TimeOffEntry = {
   _id: string;
   date: string;
   userId: string;
+  status: "pending" | "approved" | "rejected";
   user: Doc<"users"> | null;
 };
 
@@ -157,6 +158,22 @@ export function CalendarView({ timeOffEntries, selectedTeamId }: CalendarViewPro
             />
           );
         })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex gap-4 px-6 py-3 border-t border-gray-200 text-xs">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 bg-green-100 border border-green-300 rounded"></div>
+          <span className="text-gray-600">Approved</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 bg-amber-100 border border-dashed border-amber-300 rounded"></div>
+          <span className="text-gray-600">Pending</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 bg-red-100 border border-red-300 rounded"></div>
+          <span className="text-gray-600">Rejected</span>
+        </div>
       </div>
 
       {/* Date Modal */}

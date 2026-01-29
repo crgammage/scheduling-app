@@ -7,6 +7,7 @@ type TimeOffEntry = {
   _id: string;
   date: string;
   userId: string;
+  status: "pending" | "approved" | "rejected";
   user: Doc<"users"> | null;
 };
 
@@ -55,15 +56,23 @@ export function DayCell({ date, entries, isCurrentMonth, onClick }: DayCellProps
 
       {/* User Entries */}
       <div className="space-y-1">
-        {visibleEntries.map((entry) => (
-          <div
-            key={entry._id}
-            className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded truncate"
-            title={`${entry.user?.firstName} ${entry.user?.lastName}`}
-          >
-            {entry.user?.firstName} {entry.user?.lastName?.[0]}.
-          </div>
-        ))}
+        {visibleEntries.map((entry) => {
+          const normalizedStatus = entry.status?.toLowerCase() || "pending";
+          const statusStyles: Record<string, string> = {
+            approved: "bg-green-100 text-green-800",
+            pending: "bg-amber-100 text-amber-800 border border-dashed border-amber-300",
+            rejected: "bg-red-100 text-red-800 line-through",
+          };
+          return (
+            <div
+              key={entry._id}
+              className={`text-xs px-1.5 py-0.5 rounded truncate ${statusStyles[normalizedStatus] || statusStyles.pending}`}
+              title={`${entry.user?.firstName} ${entry.user?.lastName} - ${normalizedStatus}`}
+            >
+              {entry.user?.firstName} {entry.user?.lastName?.[0]}.
+            </div>
+          );
+        })}
         {remainingCount > 0 && (
           <div className="text-xs text-gray-500 px-1.5">
             +{remainingCount} more

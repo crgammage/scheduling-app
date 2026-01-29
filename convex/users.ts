@@ -46,12 +46,31 @@ export const getCurrentUser = query({
   },
 });
 
+export const checkTeamHasManager = query({
+  args: { teamId: v.id("teams") },
+  handler: async (ctx, args) => {
+    const users = await ctx.db
+      .query("users")
+      .withIndex("by_team", (q) => q.eq("teamId", args.teamId))
+      .collect();
+
+    const manager = users.find((u) => u.role?.toLowerCase() === "manager");
+    return {
+      hasManager: !!manager,
+      manager: manager
+        ? { firstName: manager.firstName, lastName: manager.lastName }
+        : null,
+    };
+  },
+});
+
 export const updateUserProfile = mutation({
   args: {
     clerkId: v.string(),
     title: v.string(),
     teamId: v.id("teams"),
     departmentId: v.id("departments"),
+    role: v.union(v.literal("manager"), v.literal("employee")),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db
@@ -63,10 +82,32 @@ export const updateUserProfile = mutation({
       throw new Error("User not found");
     }
 
+    // Normalize role to lowercase
+    const normalizedRole = args.role.toLowerCase() as "manager" | "employee";
+
+    // If selecting manager role, verify no existing manager on team
+    if (normalizedRole === "manager") {
+      const teamUsers = await ctx.db
+        .query("users")
+        .withIndex("by_team", (q) => q.eq("teamId", args.teamId))
+        .collect();
+
+      const existingManager = teamUsers.find(
+        (u) => u.role?.toLowerCase() === "manager" && u._id !== user._id
+      );
+
+      if (existingManager) {
+        throw new Error(
+          `This team already has a manager: ${existingManager.firstName} ${existingManager.lastName}`
+        );
+      }
+    }
+
     await ctx.db.patch(user._id, {
       title: args.title,
       teamId: args.teamId,
       departmentId: args.departmentId,
+      role: normalizedRole,
       isOnboarded: true,
     });
 

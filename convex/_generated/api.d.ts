@@ -9,6 +9,7 @@
  */
 
 import type * as http from "../http.js";
+import type * as migrations from "../migrations.js";
 import type * as org from "../org.js";
 import type * as timeOff from "../timeOff.js";
 import type * as users from "../users.js";
@@ -21,6 +22,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   http: typeof http;
+  migrations: typeof migrations;
   org: typeof org;
   timeOff: typeof timeOff;
   users: typeof users;

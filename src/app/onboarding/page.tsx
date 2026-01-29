@@ -14,6 +14,9 @@ export default function OnboardingPage() {
   const [title, setTitle] = useState("");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>("");
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  const [selectedRole, setSelectedRole] = useState<"manager" | "employee">(
+    "employee"
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const departments = useQuery(api.org.getDepartments);
@@ -22,6 +25,10 @@ export default function OnboardingPage() {
     selectedDepartmentId
       ? { departmentId: selectedDepartmentId as Id<"departments"> }
       : {}
+  );
+  const teamManagerInfo = useQuery(
+    api.users.checkTeamHasManager,
+    selectedTeamId ? { teamId: selectedTeamId as Id<"teams"> } : "skip"
   );
   const currentUser = useQuery(
     api.users.getCurrentUser,
@@ -53,10 +60,16 @@ export default function OnboardingPage() {
     }
   }, [currentUser, router]);
 
-  // Reset team selection when department changes
+  // Reset team and role selection when department changes
   useEffect(() => {
     setSelectedTeamId("");
+    setSelectedRole("employee");
   }, [selectedDepartmentId]);
+
+  // Reset role when team changes
+  useEffect(() => {
+    setSelectedRole("employee");
+  }, [selectedTeamId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,6 +86,7 @@ export default function OnboardingPage() {
         title,
         teamId: selectedTeamId as Id<"teams">,
         departmentId: selectedDepartmentId as Id<"departments">,
+        role: selectedRole,
       });
 
       router.push("/dashboard");
@@ -175,6 +189,58 @@ export default function OnboardingPage() {
                 ))}
               </select>
             </div>
+
+            {/* Role Selection */}
+            {selectedTeamId && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Your Role
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="role"
+                      value="employee"
+                      checked={selectedRole === "employee"}
+                      onChange={() => setSelectedRole("employee")}
+                      className="h-4 w-4 text-blue-600"
+                    />
+                    <div>
+                      <p className="font-medium text-gray-900">Employee</p>
+                      <p className="text-sm text-gray-500">
+                        Submit time off requests for manager approval
+                      </p>
+                    </div>
+                  </label>
+                  <label
+                    className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer ${
+                      teamManagerInfo?.hasManager
+                        ? "opacity-50 cursor-not-allowed bg-gray-100"
+                        : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="role"
+                      value="manager"
+                      checked={selectedRole === "manager"}
+                      onChange={() => setSelectedRole("manager")}
+                      disabled={teamManagerInfo?.hasManager}
+                      className="h-4 w-4 text-blue-600"
+                    />
+                    <div>
+                      <p className="font-medium text-gray-900">Manager</p>
+                      <p className="text-sm text-gray-500">
+                        {teamManagerInfo?.hasManager
+                          ? `This team already has a manager: ${teamManagerInfo.manager?.firstName} ${teamManagerInfo.manager?.lastName}`
+                          : "Approve or reject time off requests from your team"}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
 
             {/* Submit */}
             <button

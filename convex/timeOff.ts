@@ -23,6 +23,7 @@ export const addTimeOff = mutation({
       userId: args.userId,
       date: args.date,
       createdAt: Date.now(),
+      status: "pending",
     });
 
     return entryId;
@@ -43,6 +44,9 @@ export const removeTimeOff = mutation({
       .first();
 
     if (entry) {
+      if (entry.status?.toLowerCase() === "approved") {
+        throw new Error("Cannot remove approved time off. Contact your manager.");
+      }
       await ctx.db.delete(entry._id);
     }
   },
@@ -154,5 +158,83 @@ export const getTimeOffByTeam = query({
     );
 
     return allTimeOff.flat();
+  },
+});
+
+export const reviewTimeOff = mutation({
+  args: {
+    entryId: v.id("timeOffEntries"),
+    reviewerId: v.id("users"),
+    decision: v.union(v.literal("approved"), v.literal("rejected")),
+    rejectionReason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const entry = await ctx.db.get(args.entryId);
+    if (!entry) {
+      throw new Error("Time off entry not found");
+    }
+
+    // Get the requesting user to find their team
+    const requestingUser = await ctx.db.get(entry.userId);
+    if (!requestingUser) {
+      throw new Error("User not found");
+    }
+
+    // Get the reviewer and verify they're the team's manager
+    const reviewer = await ctx.db.get(args.reviewerId);
+    if (!reviewer) {
+      throw new Error("Reviewer not found");
+    }
+
+    if (reviewer.role?.toLowerCase() !== "manager") {
+      throw new Error("Only managers can approve or reject time off requests");
+    }
+
+    if (reviewer.teamId !== requestingUser.teamId) {
+      throw new Error("You can only review requests from your own team");
+    }
+
+    await ctx.db.patch(args.entryId, {
+      status: args.decision,
+      reviewedBy: args.reviewerId,
+      reviewedAt: Date.now(),
+      rejectionReason:
+        args.decision === "rejected" ? args.rejectionReason : undefined,
+    });
+
+    return args.entryId;
+  },
+});
+
+export const getPendingRequestsForTeam = query({
+  args: { managerId: v.id("users") },
+  handler: async (ctx, args) => {
+    // Get the manager to find their team
+    const manager = await ctx.db.get(args.managerId);
+    if (!manager || manager.role?.toLowerCase() !== "manager" || !manager.teamId) {
+      return [];
+    }
+
+    // Get all users on this team (excluding the manager)
+    const teamUsers = await ctx.db
+      .query("users")
+      .withIndex("by_team", (q) => q.eq("teamId", manager.teamId))
+      .collect();
+
+    const otherTeamUsers = teamUsers.filter((u) => u._id !== args.managerId);
+
+    // Get pending requests for all team members
+    const pendingRequests = await Promise.all(
+      otherTeamUsers.map(async (user) => {
+        const entries = await ctx.db
+          .query("timeOffEntries")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .collect();
+        const pending = entries.filter((e) => e.status?.toLowerCase() === "pending");
+        return pending.map((entry) => ({ ...entry, user }));
+      })
+    );
+
+    return pendingRequests.flat().sort((a, b) => a.date.localeCompare(b.date));
   },
 });

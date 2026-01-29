@@ -21,6 +21,7 @@ export default defineSchema({
     departmentId: v.optional(v.id("departments")),
     imageUrl: v.optional(v.string()),
     isOnboarded: v.boolean(),
+    role: v.optional(v.union(v.literal("manager"), v.literal("employee"))),
   })
     .index("by_clerk_id", ["clerkId"])
     .index("by_department", ["departmentId"])
@@ -30,8 +31,13 @@ export default defineSchema({
     userId: v.id("users"),
     date: v.string(), // ISO format YYYY-MM-DD
     createdAt: v.number(),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
+    reviewedBy: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.number()),
+    rejectionReason: v.optional(v.string()),
   })
     .index("by_user", ["userId"])
     .index("by_date", ["date"])
-    .index("by_user_and_date", ["userId", "date"]),
+    .index("by_user_and_date", ["userId", "date"])
+    .index("by_status", ["status"]),
 });

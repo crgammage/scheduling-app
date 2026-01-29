@@ -33,6 +33,14 @@ export function Navbar() {
               >
                 My Time Off
               </Link>
+              {currentUser?.role?.toLowerCase() === "manager" && (
+                <Link
+                  href="/dashboard/approvals"
+                  className="text-gray-600 hover:text-gray-900 font-medium"
+                >
+                  Approvals
+                </Link>
+              )}
             </nav>
           </div>
           <div className="flex items-center gap-4">
